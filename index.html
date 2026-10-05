@@ -1191,7 +1191,7 @@ function afterMun() {
 const CARGO_LBL = { gov: 'Governador', sen: 'Senador', fed: 'Deputado federal', est: 'Deputado estadual' };
 const ALLC = [];
 ['gov', 'sen', 'fed', 'est'].forEach(c => topStat[c].forEach(x => ALLC.push({ ...x, c, _q: norm(`${x.urna} ${x.nome} ${x.partido} ${CARGO_LBL[c]}`) })));
-const CS = { c: 'est', sq: topStat.est[0].sq, mode: 'voto', cmp: null, cf: '' };
+const CS = { c: 'est', sq: topStat.est[0].sq, mode: 'voto', cmp: null, cf: '', rank: 'v', min: 'auto' };
 const candKey = (c, sq) => `${c}|${sq}`;
 const candOf = (c, sq) => ALLC.find(x => x.c === c && x.sq === sq);
 
@@ -1280,10 +1280,24 @@ function renderCand() {
       <button class="btn" type="button" data-candcsv style="margin-left:auto">Baixar tabela (CSV)</button></div></section></div>
   <div class="grid"><section class="panel c6" style="align-self:start"><div class="panel-h"><h2>Mapa</h2><div class="tools"><div class="seg" role="group" aria-label="Modo do mapa">${modes.map(([k, l]) => `<button type="button" data-cmode="${k}" aria-pressed="${CS.mode === k}">${l}</button>`).join('')}</div></div></div><div class="panel-b"><div class="map" id="candmap"></div><div id="candkey"></div><p class="note" id="candnote"></p></div></section>
   <div class="c6" style="min-width:0;display:flex;flex-direction:column;gap:16px"><section class="panel"><div class="panel-h"><h2>Por mesorregião</h2></div><div class="panel-b"><div class="tote">${meso.map(m => barRow({ nome: m.k, sub: `${m.nv} de ${m.n} municípios com voto`, value: m.v, max: meso[0].v, valueTxt: fmt(m.v), small: pct(m.c, 1), color: hex, cls: 'sm' })).join('')}</div></div></section>
-  <section class="panel"><div class="panel-h"><h2>10 maiores contribuições</h2><span class="meta">${pct(top10, 1)} do total</span></div><div class="panel-b"><div class="tote">${top.slice(0, 10).map(r => barRow({ nome: r.nome, sub: `${pct(r.share, 1)} dos válidos · ${pct(r.eleit, 1)} dos eleitores`, value: r.v, max: top[0].v || 1, valueTxt: fmt(r.v), small: pct(r.contrib, 1), color: hex, cls: 'sm' })).join('')}</div></div></section></div></div>
-  <div class="grid"><div class="c12" style="min-width:0">${tableHTML(TB.candT, { title: 'Votos município a município', meta: 'clique no cabeçalho para ordenar · clique numa linha para abrir o município' })}</div></div>`;
+  <section class="panel" id="toppanel">${topPanel()}</section></div></div>
+  <div class="grid"><div class="c12" style="min-width:0">${tableHTML(TB.candT, { title: 'Votos município a município', meta: 'clique numa linha para abrir o município', tools: `<span style="color:var(--muted);font-size:14px">Ordenar por</span><div class="seg" role="group" aria-label="Ordenar a tabela">${[['v', 'Votos'], ['contrib', '% do total'], ['share', '% dos válidos'], ['eleit', '% dos eleitores']].map(([k, l]) => `<button type="button" data-tsq="${k}" aria-pressed="${TB.candT.sort === k}">${l}</button>`).join('')}</div>` })}</div></div>`;
   drawCandMap(); animate($('#candbody'));
   const ci = $('#cmpq'); bindCandPicker(ci, $('#cmplist'), (c2, sq2) => { CS.cmp = candKey(c2, sq2); CS.mode = 'duelo'; renderCand(); }, q => candFilterList(q).filter(x => !(x.c === CS.c && x.sq === CS.sq)));
+}
+
+
+function topPanel() {
+  const rows = CS.rows, X = MU.cand[CS.c][CS.sq], hex = bhex(X.partido), key = CS.rank;
+  const minV = CS.min === 'auto' ? (key === 'v' ? 0 : 100) : +CS.min;
+  const lab = { v: 'votos', share: '% dos votos válidos', eleit: '% dos eleitores' }[key];
+  const list = rows.filter(r => r.v > 0 && r.v >= minV).sort((a, b) => b[key === 'v' ? 'v' : key] - a[key === 'v' ? 'v' : key]).slice(0, 10);
+  const mx = list.length ? list[0][key] : 1;
+  return `<div class="panel-h"><h2>10 maiores por ${lab}</h2><span class="meta">${key === 'v' ? 'as maiores cidades tendem a liderar' : 'compara cidades de tamanhos diferentes'}</span></div>
+  <div class="panel-b"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px"><div class="seg" role="group" aria-label="Critério do ranking">${[['v', 'Votos'], ['share', '% dos válidos'], ['eleit', '% dos eleitores']].map(([k, l]) => `<button type="button" data-trank="${k}" aria-pressed="${key === k}">${l}</button>`).join('')}</div>
+  <label class="chk" style="gap:8px">Mínimo de votos<select class="fld" id="topmin" style="height:36px">${[['auto', 'Automático'], ['0', 'Sem mínimo'], ['50', '50 votos'], ['100', '100 votos'], ['500', '500 votos'], ['1000', '1.000 votos']].map(([k, l]) => `<option value="${k}" ${String(CS.min) === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
+  ${list.length ? `<div class="tote">${list.map(r => barRow({ nome: r.nome, sub: key === 'v' ? `${pct(r.share, 1)} dos válidos · ${pct(r.eleit, 1)} dos eleitores` : `${fmt(r.v)} votos · ${pct(r.contrib, 1)} do total do candidato`, value: r[key], max: mx || 1, valueTxt: key === 'v' ? fmt(r.v) : pct(r[key], 1), small: key === 'v' ? pct(r.contrib, 1) + ' do total' : '', color: hex, cls: 'sm' })).join('')}</div>` : '<div class="empty">Nenhum município atinge o mínimo de votos escolhido.</div>'}
+  <p class="note">${key === 'v' ? 'Ranking por número de votos.' : `Ranking pela força relativa do candidato em cada cidade. ${minV ? `Só entram cidades com pelo menos ${fmt(minV)} votos do candidato, para que localidades minúsculas não distorçam.` : 'Sem mínimo: cidades com pouquíssimos votos podem aparecer no topo.'}`}</p></div>`;
 }
 
 function drawCandMap() {
@@ -1315,8 +1329,11 @@ function drawCandMap() {
     p.addEventListener('click', () => { const T = TB.candT; T.f = { q: r.nome }; refreshTable('candT', true); $('[data-tbl="candT"]')?.scrollIntoView({ block: 'start', behavior: REDUCED ? 'auto' : 'smooth' }); });
   });
 }
+document.addEventListener('change', e => { if (e.target.id === 'topmin') { CS.min = e.target.value; $('#toppanel').innerHTML = topPanel(); animate($('#toppanel')); } });
 document.addEventListener('click', e => {
   let b;
+  if ((b = e.target.closest('[data-trank]'))) { CS.rank = b.dataset.trank; $('#toppanel').innerHTML = topPanel(); animate($('#toppanel')); return; }
+  if ((b = e.target.closest('[data-tsq]'))) { const T = TB.candT; T.sort = b.dataset.tsq; T.dir = 'desc'; refreshTable('candT'); $$('[data-tsq]').forEach(x => x.setAttribute('aria-pressed', x === b)); return; }
   if ((b = e.target.closest('[data-cand]'))) { const [c, sq] = b.dataset.cand.split('|'); gotoCand(c, sq); return; }
   if ((b = e.target.closest('[data-cf]'))) { CS.cf = b.dataset.cf; $$('[data-cf]').forEach(x => x.setAttribute('aria-pressed', x === b)); const i = $('#candq'); if (i) { i.focus(); } return; }
   if ((b = e.target.closest('[data-cmode]'))) { CS.mode = b.dataset.cmode; $$('[data-cmode]').forEach(x => x.setAttribute('aria-pressed', x === b)); drawCandMap(); return; }
